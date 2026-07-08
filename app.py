@@ -75,10 +75,22 @@ def extract_session(x_api_key: str = Header(None)):
             login_toggle = page.locator('text="Log in"').last
             login_toggle.click()
             
-            print("[4/5] Entering user credentials...")
-            page.wait_for_selector('input[type="email"]', state="visible", timeout=10000)
-            page.fill('input[type="email"]', EMAIL)
-            page.fill('input[type="password"]', PASSWORD)
+            print(f"[4/5] Entering user credentials (Human Typing Mode)...")
+            
+            # Wait for fields to be interactable
+            email_field = page.locator('input[type="email"]')
+            pass_field = page.locator('input[type="password"]')
+            
+            email_field.wait_for(state="visible", timeout=10000)
+            
+            # Click and type email stroke-by-stroke
+            email_field.click()
+            email_field.press_sequentially(EMAIL, delay=150)
+            
+            # Click and type password stroke-by-stroke
+            pass_field.click()
+            pass_field.press_sequentially(PASSWORD, delay=100)
+
             
             print("[5/5] Submitting credentials...")
             login_submit_btn = page.locator('text="Log in with email"').first
