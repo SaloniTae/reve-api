@@ -98,11 +98,25 @@ def extract_session(x_api_key: str = Header(None)):
             page.wait_for_url("**/home", timeout=25000)
             time.sleep(2) 
             
-            print("[6/6] Navigating to /albums/new to force CAPTCHA cookie generation...")
-            # Loading the actual generation environment to guarantee the captcha_id is baked into the session
+            print("[6/6] Navigating to /albums/new to trigger CAPTCHA...")
             page.goto("https://app.reve.com/albums/new", wait_until="networkidle")
-            time.sleep(3) # Give the browser a moment to store the incoming cookies
             
+            print("⌛ Actively scanning cookie jar for captcha_id...")
+            captcha_found = False
+            for attempt in range(15): # Scan for up to 15 seconds
+                cookies = context.cookies()
+                if any(c['name'] == 'captcha_id' for c in cookies):
+                    captcha_found = True
+                    print(f"✅ captcha_id found on attempt {attempt + 1}!")
+                    break
+                time.sleep(1)
+                
+            if not captcha_found:
+                print("⚠️ captcha_id not found on /albums/new. Firing fallback API directly...")
+                # Fallback: Hit the config API directly in the browser to force the Set-Cookie header
+                page.goto("https://app.reve.com/api/misc/feature_config", wait_until="networkidle")
+                time.sleep(3)
+
         except Exception as e:
             print(f"\n❌ CRASH REASON: {str(e)}\n")
             print(f"Taking a screenshot and uploading to R2...")
@@ -119,8 +133,8 @@ def extract_session(x_api_key: str = Header(None)):
             
             browser.close()
             raise HTTPException(status_code=500, detail=f"Blocking occurred. {r2_status}. Check docker logs for exact error.")
-            
 
+        # Final Extraction
         cookies = context.cookies()
         cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
         
