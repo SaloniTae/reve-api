@@ -75,15 +75,15 @@ def extract_session(x_api_key: str = Header(None)):
             login_toggle = page.locator('text="Log in"').last
             login_toggle.click()
             
-            print("[4/5] Entering user credentials (Strict-Bypass Mode)...")
+            print("[4/5] Entering user credentials (Form-Scoped Mode)...")
             
-            # The :visible flag forces it to ignore the hidden Sign Up inputs
-            email_field = page.locator('input[type="email"]:visible')
-            pass_field = page.locator('input[type="password"]:visible')
+            # Target the inputs strictly inside the #form-login container
+            email_field = page.locator('#form-login input[type="email"]')
+            pass_field = page.locator('#form-login input[type="password"]')
             
-            email_field.wait_for(timeout=10000)
+            email_field.wait_for(state="visible", timeout=10000)
             
-            # Focus the element, then use raw hardware-level keyboard typing
+            # Focus and simulate human typing
             email_field.focus()
             page.keyboard.type(EMAIL, delay=100)
             
@@ -91,12 +91,13 @@ def extract_session(x_api_key: str = Header(None)):
             page.keyboard.type(PASSWORD, delay=100)
             
             print("[5/5] Submitting credentials...")
-            login_submit_btn = page.locator('text="Log in with email":visible').first
+            # Target the submit button strictly inside the #form-login container
+            login_submit_btn = page.locator('#form-login button[type="submit"]')
             login_submit_btn.click()
             
             print("⌛ Waiting for home dashboard routing to verify token capture...")
             page.wait_for_url("**/home", timeout=25000)
-            time.sleep(4) 
+            time.sleep(4)
             
         except Exception as e:
             print(f"\n❌ CRASH REASON: {str(e)}\n") # <--- This will print the exact error to your terminal!
