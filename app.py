@@ -75,25 +75,23 @@ def extract_session(x_api_key: str = Header(None)):
             login_toggle = page.locator('text="Log in"').last
             login_toggle.click()
             
-            print(f"[4/5] Entering user credentials (Human Typing Mode)...")
+            print("[4/5] Entering user credentials (Strict-Bypass Mode)...")
             
-            # Wait for fields to be interactable
-            email_field = page.locator('input[type="email"]')
-            pass_field = page.locator('input[type="password"]')
+            # The :visible flag forces it to ignore the hidden Sign Up inputs
+            email_field = page.locator('input[type="email"]:visible')
+            pass_field = page.locator('input[type="password"]:visible')
             
-            email_field.wait_for(state="visible", timeout=10000)
+            email_field.wait_for(timeout=10000)
             
-            # Click and type email stroke-by-stroke
-            email_field.click()
-            email_field.press_sequentially(EMAIL, delay=150)
+            # Focus the element, then use raw hardware-level keyboard typing
+            email_field.focus()
+            page.keyboard.type(EMAIL, delay=100)
             
-            # Click and type password stroke-by-stroke
-            pass_field.click()
-            pass_field.press_sequentially(PASSWORD, delay=100)
-
+            pass_field.focus()
+            page.keyboard.type(PASSWORD, delay=100)
             
             print("[5/5] Submitting credentials...")
-            login_submit_btn = page.locator('text="Log in with email"').first
+            login_submit_btn = page.locator('text="Log in with email":visible').first
             login_submit_btn.click()
             
             print("⌛ Waiting for home dashboard routing to verify token capture...")
@@ -101,26 +99,22 @@ def extract_session(x_api_key: str = Header(None)):
             time.sleep(4) 
             
         except Exception as e:
-            print(f"❌ Navigation failed! Taking a screenshot and uploading to R2...")
+            print(f"\n❌ CRASH REASON: {str(e)}\n") # <--- This will print the exact error to your terminal!
+            print(f"Taking a screenshot and uploading to R2...")
             
-            # Take the screenshot
             screenshot_path = "error.png"
             page.screenshot(path=screenshot_path)
-            
-            # Generate a unique filename based on the current timestamp
             r2_filename = f"reve_debug/error_{int(time.time())}.png"
             
             try:
-                # Upload to Cloudflare R2
                 s3_client.upload_file(screenshot_path, BUCKET_NAME, r2_filename)
-                r2_status = f"Screenshot successfully uploaded to R2 bucket '{BUCKET_NAME}' as '{r2_filename}'"
+                r2_status = f"Screenshot uploaded to R2 as '{r2_filename}'"
             except Exception as upload_err:
                 r2_status = f"R2 Upload Failed: {str(upload_err)}"
             
             browser.close()
+            raise HTTPException(status_code=500, detail=f"Blocking occurred. {r2_status}. Check docker logs for exact error.")
             
-            # Return the failure and the R2 location
-            raise HTTPException(status_code=500, detail=f"Timeout or blocking occurred. {r2_status}")
 
         cookies = context.cookies()
         cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
