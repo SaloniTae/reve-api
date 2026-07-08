@@ -98,10 +98,10 @@ def extract_session(x_api_key: str = Header(None)):
             page.wait_for_url("**/home", timeout=25000)
             time.sleep(2) 
             
-            print("[6/6] Pinging API to trigger CAPTCHA cookie generation...")
-            # Hitting the base endpoint dynamically forces the server to assign a fresh captcha_id
-            page.goto("https://app.reve.com/api/misc/feature_config", wait_until="networkidle")
-            time.sleep(2) # Give the browser a moment to save the incoming cookie
+            print("[6/6] Navigating to /albums/new to force CAPTCHA cookie generation...")
+            # Loading the actual generation environment to guarantee the captcha_id is baked into the session
+            page.goto("https://app.reve.com/albums/new", wait_until="networkidle")
+            time.sleep(3) # Give the browser a moment to store the incoming cookies
             
         except Exception as e:
             print(f"\n❌ CRASH REASON: {str(e)}\n")
