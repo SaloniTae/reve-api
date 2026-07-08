@@ -90,17 +90,21 @@ def extract_session(x_api_key: str = Header(None)):
             pass_field.focus()
             page.keyboard.type(PASSWORD, delay=100)
             
-            print("[5/5] Submitting credentials...")
-            # Target the submit button strictly inside the #form-login container
+            print("[5/6] Submitting credentials...")
             login_submit_btn = page.locator('#form-login button[type="submit"]')
             login_submit_btn.click()
             
             print("⌛ Waiting for home dashboard routing to verify token capture...")
             page.wait_for_url("**/home", timeout=25000)
-            time.sleep(4)
+            time.sleep(2) 
+            
+            print("[6/6] Pinging API to trigger CAPTCHA cookie generation...")
+            # Hitting the base endpoint dynamically forces the server to assign a fresh captcha_id
+            page.goto("https://app.reve.com/api/misc/feature_config", wait_until="networkidle")
+            time.sleep(2) # Give the browser a moment to save the incoming cookie
             
         except Exception as e:
-            print(f"\n❌ CRASH REASON: {str(e)}\n") # <--- This will print the exact error to your terminal!
+            print(f"\n❌ CRASH REASON: {str(e)}\n")
             print(f"Taking a screenshot and uploading to R2...")
             
             screenshot_path = "error.png"
