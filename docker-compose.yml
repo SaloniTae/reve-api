@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  reve-api:
+    build: .
+    ports:
+      - "8009:8009"
+    env_file:
+      - .env
+    restart: always
+    
