@@ -3,6 +3,8 @@ from playwright.sync_api import sync_playwright
 from playwright_stealth import stealth_sync
 import os
 import time
+import boto3
+from botocore.config import Config
 
 app = FastAPI()
 
@@ -10,9 +12,25 @@ EMAIL = os.getenv("REVE_EMAIL")
 PASSWORD = os.getenv("REVE_PASSWORD")
 API_KEY = os.getenv("API_KEY")
 
+# Cloudflare R2 Configuration
+R2_ACCESS_KEY = os.getenv("R2_ACCESS_KEY")
+R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
+R2_ENDPOINT = "https://912665bde4a5e0c8559acb3b0b1cd8e9.r2.cloudflarestorage.com"
+BUCKET_NAME = "oor-ad"
+
+# Initialize S3 Client for Cloudflare R2
+s3_client = boto3.client(
+    's3',
+    endpoint_url=R2_ENDPOINT,
+    aws_access_key_id=R2_ACCESS_KEY,
+    aws_secret_access_key=R2_SECRET_KEY,
+    region_name='auto',
+    config=Config(signature_version='s3v4')
+)
+
 @app.get("/")
 def health_check():
-    return {"status": "ok", "message": "API is running (Sync Mode)"}
+    return {"status": "ok", "message": "API is running (Sync Mode + R2)"}
 
 @app.get("/extract-session")
 def extract_session(x_api_key: str = Header(None)):
@@ -22,23 +40,20 @@ def extract_session(x_api_key: str = Header(None)):
     if not EMAIL or not PASSWORD:
         raise HTTPException(status_code=500, detail="REVE_EMAIL or REVE_PASSWORD environment variables are missing.")
 
-    # Using standard Sync Playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
             args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"]
         )
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 720}
         )
         page = context.new_page()
-        
-        # Apply the synchronous stealth patch
         stealth_sync(page)
 
         extracted_data = {"auth_token": None}
 
-        # Background traffic interceptor
         def handle_request(request):
             auth_header = request.headers.get("authorization", "")
             if "Bearer" in auth_header and "v2.login" in auth_header:
@@ -71,11 +86,29 @@ def extract_session(x_api_key: str = Header(None)):
             
             print("⌛ Waiting for home dashboard routing to verify token capture...")
             page.wait_for_url("**/home", timeout=25000)
-            time.sleep(4) # Standard Python time sleep
+            time.sleep(4) 
             
         except Exception as e:
+            print(f"❌ Navigation failed! Taking a screenshot and uploading to R2...")
+            
+            # Take the screenshot
+            screenshot_path = "error.png"
+            page.screenshot(path=screenshot_path)
+            
+            # Generate a unique filename based on the current timestamp
+            r2_filename = f"reve_debug/error_{int(time.time())}.png"
+            
+            try:
+                # Upload to Cloudflare R2
+                s3_client.upload_file(screenshot_path, BUCKET_NAME, r2_filename)
+                r2_status = f"Screenshot successfully uploaded to R2 bucket '{BUCKET_NAME}' as '{r2_filename}'"
+            except Exception as upload_err:
+                r2_status = f"R2 Upload Failed: {str(upload_err)}"
+            
             browser.close()
-            raise HTTPException(status_code=500, detail=f"Interface automation failed: {str(e)}")
+            
+            # Return the failure and the R2 location
+            raise HTTPException(status_code=500, detail=f"Timeout or blocking occurred. {r2_status}")
 
         cookies = context.cookies()
         cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
