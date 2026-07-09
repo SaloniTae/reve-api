@@ -141,9 +141,8 @@ def extract_session(x_api_key: str = Header(None)):
                     break
                 time.sleep(1)
 
-        except Exception as e:
 
-
+        
         except Exception as e:
             print(f"\n❌ CRASH REASON: {str(e)}\n")
             print(f"Taking a screenshot and uploading to R2...")
