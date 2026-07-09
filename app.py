@@ -50,43 +50,41 @@ def extract_session(x_api_key: str = Header(None)):
             viewport={"width": 1280, "height": 720}
         )
         page = context.new_page()
-     #   stealth_sync(page)
+
+        
+        # Ensure stealth is ON!
+        stealth_sync(page)
 
         extracted_data = {"auth_token": None}
 
-        extracted_data = {"auth_token": None}
-
-        # 1. Look for the Bearer token in outgoing requests
         def handle_request(request):
             auth_header = request.headers.get("authorization", "")
             if "Bearer" in auth_header and "v2.login" in auth_header:
                 extracted_data["auth_token"] = auth_header
 
-        # 2. UPDATED: DevTools Network Sniffer for incoming responses
+        # Upgraded Sniffer to watch the exact anti-bot endpoint
         def handle_response(response):
             try:
-                # Print every URL just to prove the sniffer is working!
-                short_url = response.url.replace("https://app.reve.com", "")
-                print(f"🌐 [NET] {response.status} {short_url[:60]}", flush=True) 
-                
+                if "verify_recaptcha" in response.url:
+                    print(f"🛡️ [RECAPTCHA API] Server responded with Status: {response.status}", flush=True)
+                    if response.status == 200:
+                        print("   ✅ Bot check passed!", flush=True)
+                    elif response.status == 403:
+                        print("   ❌ Bot check failed (403 Forbidden)!", flush=True)
+
                 headers = response.headers
                 if "set-cookie" in headers:
                     cookie_data = headers["set-cookie"]
-                    print(f"   🍪 [COOKIE] {cookie_data[:80]}...", flush=True)
-                    
                     if "captcha_id" in cookie_data:
-                        print(f"🚨 BINGO! CAPTCHA_ID FOUND IN HEADER!", flush=True)
-            except Exception as e:
-                print(f"Sniffer error: {e}", flush=True)
+                        print(f"🚨 BINGO! SERVER HANDED OVER CAPTCHA_ID!", flush=True)
+            except Exception:
+                pass
 
-
-        # Attach the listeners to the browser
         page.on("request", handle_request)
         page.on("response", handle_response)
 
         try:
             print("[1/5] Loading root website...")
-
             page.goto("https://app.reve.com", wait_until="networkidle")
             
             print("[2/5] Clicking 'Start creating' button...")
@@ -99,18 +97,13 @@ def extract_session(x_api_key: str = Header(None)):
             login_toggle = page.locator('text="Log in"').last
             login_toggle.click()
             
-            print("[4/5] Entering user credentials (Form-Scoped Mode)...")
-            
-            # Target the inputs strictly inside the #form-login container
+            print("[4/5] Entering user credentials...")
             email_field = page.locator('#form-login input[type="email"]')
             pass_field = page.locator('#form-login input[type="password"]')
-            
             email_field.wait_for(state="visible", timeout=10000)
             
-            # Focus and simulate human typing
             email_field.focus()
             page.keyboard.type(EMAIL, delay=100)
-            
             pass_field.focus()
             page.keyboard.type(PASSWORD, delay=100)
             
@@ -118,53 +111,30 @@ def extract_session(x_api_key: str = Header(None)):
             login_submit_btn = page.locator('#form-login button[type="submit"]')
             login_submit_btn.click()
             
-            print("⌛ Waiting for home dashboard routing to verify token capture...")
+            print("⌛ Waiting for home dashboard routing...")
             page.wait_for_url("**/home", timeout=25000)
             time.sleep(2) 
             
-            print("[6/6] Navigating to /albums/new to force CAPTCHA cookie...", flush=True)
+            print("[6/6] Navigating to /albums/new to trigger CAPTCHA...", flush=True)
             page.goto("https://app.reve.com/albums/new", wait_until="networkidle")
             
+            print("⌛ Waiting for verify_recaptcha background API...", flush=True)
             captcha_found = False
-            # Try loading the page up to 6 times
-            for attempt in range(6): 
-                print(f"⌛ Scanning cookies (Attempt {attempt + 1}/6)...", flush=True)
-                
-                # Wait 4 seconds for the background reCAPTCHA script to finish its math
-                time.sleep(4) 
-                
+            for attempt in range(15): 
                 cookies = context.cookies()
                 if any(c['name'] == 'captcha_id' for c in cookies):
                     captcha_found = True
-                    print(f"✅ BINGO! captcha_id generated on attempt {attempt + 1}!", flush=True)
+                    print(f"✅ captcha_id safely secured in cookie jar!", flush=True)
                     break
-                
-                # If we haven't reached the last attempt, reload the page
-                if attempt < 5:
-                    print("⚠️ captcha_id not found yet. Reloading /albums/new...", flush=True)
-                    page.reload(wait_until="networkidle")
+                time.sleep(1)
                 
             if not captcha_found:
-                print("❌ Failed to get captcha_id after 6 reloads.", flush=True)
+                print("❌ Failed to secure captcha_id. Server likely threw a 403.", flush=True)
 
-
-        
         except Exception as e:
             print(f"\n❌ CRASH REASON: {str(e)}\n")
-            print(f"Taking a screenshot and uploading to R2...")
-            
-            screenshot_path = "error.png"
-            page.screenshot(path=screenshot_path)
-            r2_filename = f"reve_debug/error_{int(time.time())}.png"
-            
-            try:
-                s3_client.upload_file(screenshot_path, BUCKET_NAME, r2_filename)
-                r2_status = f"Screenshot uploaded to R2 as '{r2_filename}'"
-            except Exception as upload_err:
-                r2_status = f"R2 Upload Failed: {str(upload_err)}"
-            
             browser.close()
-            raise HTTPException(status_code=500, detail=f"Blocking occurred. {r2_status}. Check docker logs for exact error.")
+            raise HTTPException(status_code=500, detail="Automation crashed. Check logs.")
 
         # Final Extraction
         cookies = context.cookies()
@@ -173,7 +143,7 @@ def extract_session(x_api_key: str = Header(None)):
         browser.close()
 
         if not extracted_data["auth_token"]:
-            raise HTTPException(status_code=500, detail="Authentication successful, but JWT network interception missed the token context.")
+            raise HTTPException(status_code=500, detail="Missed Bearer token.")
 
         return {
             "success": True,
@@ -182,3 +152,4 @@ def extract_session(x_api_key: str = Header(None)):
                 "cookie": cookie_str
             }
         }
+        
