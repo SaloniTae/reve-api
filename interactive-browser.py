@@ -32,6 +32,8 @@ def main():
                 pass
 
         page.on("response", handle_response)
+        page.on("console", lambda msg: print(f"[CONSOLE] {msg.type}: {msg.text}", flush=True))
+        page.on("pageerror", lambda exc: print(f"[PAGE ERROR] {exc}", flush=True))
 
         print("Browser launched. Navigate manually from your VNC session.")
         page.goto("https://app.reve.com")  # starting point; change/remove as you like
