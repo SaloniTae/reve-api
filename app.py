@@ -122,24 +122,30 @@ def extract_session(x_api_key: str = Header(None)):
             page.wait_for_url("**/home", timeout=25000)
             time.sleep(2) 
             
-            print("[6/6] Injecting native JS to fetch feature_config and force CAPTCHA...", flush=True)
+            print("[6/6] Navigating to /albums/new to force CAPTCHA cookie...", flush=True)
+            page.goto("https://app.reve.com/albums/new", wait_until="networkidle")
             
-            # Use browser JavaScript to trigger the API, perfectly mimicking the frontend React app
-            page.evaluate("""
-                fetch('/api/misc/feature_config?project=b9b74114-07b6-44b3-9811-46c27d37a5e1')
-                .then(response => response.json())
-                .catch(err => console.error(err));
-            """)
-            
-            print("⌛ Actively scanning cookie jar for captcha_id...", flush=True)
             captcha_found = False
-            for attempt in range(15): # Scan for up to 15 seconds
+            # Try loading the page up to 6 times
+            for attempt in range(6): 
+                print(f"⌛ Scanning cookies (Attempt {attempt + 1}/6)...", flush=True)
+                
+                # Wait 4 seconds for the background reCAPTCHA script to finish its math
+                time.sleep(4) 
+                
                 cookies = context.cookies()
                 if any(c['name'] == 'captcha_id' for c in cookies):
                     captcha_found = True
-                    print(f"✅ captcha_id found on attempt {attempt + 1}!", flush=True)
+                    print(f"✅ BINGO! captcha_id generated on attempt {attempt + 1}!", flush=True)
                     break
-                time.sleep(1)
+                
+                # If we haven't reached the last attempt, reload the page
+                if attempt < 5:
+                    print("⚠️ captcha_id not found yet. Reloading /albums/new...", flush=True)
+                    page.reload(wait_until="networkidle")
+                
+            if not captcha_found:
+                print("❌ Failed to get captcha_id after 6 reloads.", flush=True)
 
 
         
