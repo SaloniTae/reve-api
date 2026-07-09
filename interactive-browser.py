@@ -7,14 +7,21 @@ from playwright.sync_api import sync_playwright
 from playwright_stealth import stealth_sync
 import time
 
+
 def main():
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=False,          # required so it renders on the X display
-            args=["--start-maximized"],
+            headless=False,
+            args=[
+                "--start-maximized",
+                "--window-position=0,0",
+            ],
+            ignore_default_args=["--no-startup-window"],
         )
-        context = browser.new_context(no_viewport=True)
+
+        context = browser.new_context(viewport=None)  # instead of no_viewport=True
         page = context.new_page()
+
         stealth_sync(page)
 
         # Optional: log every network response so you can watch requests live
@@ -23,6 +30,7 @@ def main():
                 print(f"[NET] {response.status} {response.url[:100]}", flush=True)
             except Exception:
                 pass
+
         page.on("response", handle_response)
 
         print("Browser launched. Navigate manually from your VNC session.")
@@ -35,6 +43,7 @@ def main():
         except KeyboardInterrupt:
             print("Closing browser...")
             browser.close()
+
 
 if __name__ == "__main__":
     main()
