@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware # 🚀 Import CORS
 from pydantic import BaseModel
 from playwright.sync_api import sync_playwright
 import os
@@ -6,16 +7,22 @@ import time
 
 app = FastAPI()
 
+# 🚀 ALLOW CROSS-ORIGIN REQUESTS FROM THE BROWSER
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://app.reve.com"], # Explicitly allow the target site
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 EMAIL = os.getenv("REVE_EMAIL")
 PASSWORD = os.getenv("REVE_PASSWORD")
 API_KEY = os.getenv("API_KEY")
 
-# ==========================================
-# THE CAPTCHA POOL (Stored in RAM)
-# ==========================================
-# Stores dicts: {"id": "...", "timestamp": 1234567890.12}
 captcha_pool = []
-MAX_TOKEN_AGE_SECONDS = 180 # 3 minutes max before a token goes bad
+MAX_TOKEN_AGE_SECONDS = 180
+ # 3 minutes max before a token goes bad
 
 class CaptchaPayload(BaseModel):
     captcha_id: str
