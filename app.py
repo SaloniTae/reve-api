@@ -122,24 +122,27 @@ def extract_session(x_api_key: str = Header(None)):
             page.wait_for_url("**/home", timeout=25000)
             time.sleep(2) 
             
-            print("[6/6] Navigating to /albums/new to trigger CAPTCHA...")
-            page.goto("https://app.reve.com/albums/new", wait_until="networkidle")
+            print("[6/6] Injecting native JS to fetch feature_config and force CAPTCHA...", flush=True)
             
-            print("⌛ Actively scanning cookie jar for captcha_id...")
+            # Use browser JavaScript to trigger the API, perfectly mimicking the frontend React app
+            page.evaluate("""
+                fetch('/api/misc/feature_config?project=b9b74114-07b6-44b3-9811-46c27d37a5e1')
+                .then(response => response.json())
+                .catch(err => console.error(err));
+            """)
+            
+            print("⌛ Actively scanning cookie jar for captcha_id...", flush=True)
             captcha_found = False
             for attempt in range(15): # Scan for up to 15 seconds
                 cookies = context.cookies()
                 if any(c['name'] == 'captcha_id' for c in cookies):
                     captcha_found = True
-                    print(f"✅ captcha_id found on attempt {attempt + 1}!")
+                    print(f"✅ captcha_id found on attempt {attempt + 1}!", flush=True)
                     break
                 time.sleep(1)
-                
-            if not captcha_found:
-                print("⚠️ captcha_id not found on /albums/new. Firing fallback API directly...")
-                # Fallback: Hit the config API directly in the browser to force the Set-Cookie header
-                page.goto("https://app.reve.com/api/misc/feature_config", wait_until="networkidle")
-                time.sleep(3)
+
+        except Exception as e:
+
 
         except Exception as e:
             print(f"\n❌ CRASH REASON: {str(e)}\n")
