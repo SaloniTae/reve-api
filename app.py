@@ -50,7 +50,7 @@ def extract_session(x_api_key: str = Header(None)):
             viewport={"width": 1280, "height": 720}
         )
         page = context.new_page()
-        stealth_sync(page)
+     #   stealth_sync(page)
 
         extracted_data = {"auth_token": None}
 
