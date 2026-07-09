@@ -4,6 +4,8 @@ from playwright_stealth import stealth_sync
 import os
 import time
 import boto3
+import random
+from urllib.parse import urlparse
 from botocore.config import Config
 
 app = FastAPI()
@@ -28,9 +30,31 @@ s3_client = boto3.client(
     config=Config(signature_version='s3v4')
 )
 
+def get_random_proxy(file_path="proxies.txt"):
+    """Reads the proxy txt file, ignores comments, and formats for Playwright."""
+    if not os.path.exists(file_path):
+        print(f"⚠️ Proxy file '{file_path}' not found. Running without proxy.", flush=True)
+        return None
+        
+    with open(file_path, "r") as f:
+        # Extract only valid URI lines, ignoring # comments and empty spaces
+        lines = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        
+    if not lines:
+        return None
+        
+    raw_proxy = random.choice(lines)
+    parsed = urlparse(raw_proxy)
+    
+    return {
+        "server": f"{parsed.scheme}://{parsed.hostname}:{parsed.port}",
+        "username": parsed.username,
+        "password": parsed.password
+    }
+
 @app.get("/")
 def health_check():
-    return {"status": "ok", "message": "API is running (Sync Mode + R2)"}
+    return {"status": "ok", "message": "API is running (Sync Mode + R2 + Proxies)"}
 
 @app.get("/extract-session")
 def extract_session(x_api_key: str = Header(None)):
@@ -41,17 +65,27 @@ def extract_session(x_api_key: str = Header(None)):
         raise HTTPException(status_code=500, detail="REVE_EMAIL or REVE_PASSWORD environment variables are missing.")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"]
-        )
+        
+        # Configure Launch Arguments
+        launch_args = {
+            "headless": True,
+            "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"]
+        }
+        
+        # Inject Webshare Proxy
+        proxy_config = get_random_proxy("proxies.txt")
+        if proxy_config:
+            launch_args["proxy"] = proxy_config
+            print(f"🌍 Launching browser via proxy server: {proxy_config['server']}", flush=True)
+
+        browser = p.chromium.launch(**launch_args)
+        
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 720}
         )
         page = context.new_page()
 
-        
         # Ensure stealth is ON!
         stealth_sync(page)
 
@@ -118,6 +152,15 @@ def extract_session(x_api_key: str = Header(None)):
             print("[6/6] Navigating to /albums/new to trigger CAPTCHA...", flush=True)
             page.goto("https://app.reve.com/albums/new", wait_until="networkidle")
             
+            print("🐁 Generating human mouse telemetry for trust score...", flush=True)
+            page.mouse.move(100, 200)
+            time.sleep(0.5)
+            page.mouse.move(500, 400)
+            time.sleep(0.5)
+            page.mouse.move(300, 600)
+            time.sleep(0.5)
+            page.mouse.click(300, 600)
+            
             print("⌛ Waiting for verify_recaptcha background API...", flush=True)
             captcha_found = False
             for attempt in range(15): 
@@ -152,4 +195,3 @@ def extract_session(x_api_key: str = Header(None)):
                 "cookie": cookie_str
             }
         }
-        
