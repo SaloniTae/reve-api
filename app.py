@@ -54,15 +54,40 @@ def extract_session(x_api_key: str = Header(None)):
 
         extracted_data = {"auth_token": None}
 
+        extracted_data = {"auth_token": None}
+
+        # 1. Look for the Bearer token in outgoing requests
         def handle_request(request):
             auth_header = request.headers.get("authorization", "")
             if "Bearer" in auth_header and "v2.login" in auth_header:
                 extracted_data["auth_token"] = auth_header
 
+        # 2. NEW: DevTools Network Sniffer for incoming responses
+        def handle_response(response):
+            try:
+                # Get all headers sent back by the server
+                headers = response.headers
+                
+                # Check if the server is trying to set a cookie
+                if "set-cookie" in headers:
+                    cookie_data = headers["set-cookie"]
+                    # Clean up the URL so it's easy to read in the terminal
+                    short_url = response.url.replace("https://app.reve.com", "")
+                    
+                    print(f"📥 [NETWORK] Set-Cookie from {short_url[:50]}")
+                    
+                    if "captcha_id" in cookie_data:
+                        print(f"🚨 BINGO! SERVER SENT CAPTCHA_ID: {cookie_data[:80]}...")
+            except Exception:
+                pass
+
+        # Attach the listeners to the browser
         page.on("request", handle_request)
+        page.on("response", handle_response)
 
         try:
             print("[1/5] Loading root website...")
+
             page.goto("https://app.reve.com", wait_until="networkidle")
             
             print("[2/5] Clicking 'Start creating' button...")
