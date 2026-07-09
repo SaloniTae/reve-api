@@ -62,24 +62,23 @@ def extract_session(x_api_key: str = Header(None)):
             if "Bearer" in auth_header and "v2.login" in auth_header:
                 extracted_data["auth_token"] = auth_header
 
-        # 2. NEW: DevTools Network Sniffer for incoming responses
+        # 2. UPDATED: DevTools Network Sniffer for incoming responses
         def handle_response(response):
             try:
-                # Get all headers sent back by the server
-                headers = response.headers
+                # Print every URL just to prove the sniffer is working!
+                short_url = response.url.replace("https://app.reve.com", "")
+                print(f"🌐 [NET] {response.status} {short_url[:60]}", flush=True) 
                 
-                # Check if the server is trying to set a cookie
+                headers = response.headers
                 if "set-cookie" in headers:
                     cookie_data = headers["set-cookie"]
-                    # Clean up the URL so it's easy to read in the terminal
-                    short_url = response.url.replace("https://app.reve.com", "")
-                    
-                    print(f"📥 [NETWORK] Set-Cookie from {short_url[:50]}")
+                    print(f"   🍪 [COOKIE] {cookie_data[:80]}...", flush=True)
                     
                     if "captcha_id" in cookie_data:
-                        print(f"🚨 BINGO! SERVER SENT CAPTCHA_ID: {cookie_data[:80]}...")
-            except Exception:
-                pass
+                        print(f"🚨 BINGO! CAPTCHA_ID FOUND IN HEADER!", flush=True)
+            except Exception as e:
+                print(f"Sniffer error: {e}", flush=True)
+
 
         # Attach the listeners to the browser
         page.on("request", handle_request)
